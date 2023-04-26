@@ -45,6 +45,70 @@ def get_portfolio():
 
     return Response(status=400)
 
+@app.route('/deposit', methods=['POST'])
+def deposit():
+    # Verify if the client is authenticated
+    res = verify(request)
+
+    if res is None:
+        return Response(status=401)
+    
+    clientID = res['clientID']
+    
+    # Request client's portfolio from Portfolio Management Service
+    response = requests.get(f"http://portfolio-mgmt:5000/portfolio/{clientID}")
+    
+    if not response is None:
+        data = response.json()
+        old_cash_balance = int(data['Cash'])
+
+        # Get request body
+        payload = request.get_json(force=True)
+
+        deposited_cash = int(payload.get('amount'))
+        new_cash_balance = old_cash_balance + deposited_cash
+
+        update_payload = {"Cash": str(new_cash_balance)}
+
+        response = requests.put(f"http://portfolio-mgmt:5000/portfolio/{clientID}", json=update_payload)
+
+        return Response(response.text, status=response.status_code, mimetype="json/application")
+        
+    return Response(status=400)
+
+@app.route('/withdraw', methods=['POST'])
+def withdra():
+    # Verify if the client is authenticated
+    res = verify(request)
+
+    if res is None:
+        return Response(status=401)
+    
+    clientID = res['clientID']
+    
+    # Request client's portfolio from Portfolio Management Service
+    response = requests.get(f"http://portfolio-mgmt:5000/portfolio/{clientID}")
+    
+    if not response is None:
+        data = response.json()
+        cash_balance = int(data['Cash'])
+
+        # Get request body
+        payload = request.get_json(force=True)
+
+        withdrawn_cash = int(payload.get('amount'))
+        new_cash_balance = cash_balance - withdrawn_cash
+
+        if new_cash_balance < 0:
+            return Response(json.dumps({'error': 'insufficient funds'}), status=400, mimetype='application/json')
+
+        update_payload = {"Cash": str(new_cash_balance)}
+
+        response = requests.put(f"http://portfolio-mgmt:5000/portfolio/{clientID}", json=update_payload)
+
+        return Response(response.text, status=response.status_code, mimetype="json/application")
+        
+    return Response(status=400)
 
 if __name__ == "__main__":
     app.run(debug=False)
