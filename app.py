@@ -41,7 +41,19 @@ def get_portfolio():
     response = requests.get(f"http://portfolio-mgmt:5000/portfolio/{clientID}")
 
     if not response is None:
-        return Response(response.text, status=response.status_code, mimetype="application/json")
+        value = 0.0
+        # Append total value of portfolio to response
+        portfolio = response.json()
+        for symbol in portfolio:
+            if symbol == 'Cash':
+                value += float(portfolio[symbol])
+            else:
+                price = getQuotes(symbol).get('price')
+                quantity = int(portfolio[symbol])
+                value += price * quantity
+
+        portfolio['Value'] = value
+        return Response(json.dumps(portfolio), status=response.status_code, mimetype="application/json")
 
     return Response(status=400)
 
@@ -77,7 +89,7 @@ def deposit():
     return Response(status=400)
 
 @app.route('/withdraw', methods=['POST'])
-def withdra():
+def withdraw():
     # Verify if the client is authenticated
     res = verify(request)
 
