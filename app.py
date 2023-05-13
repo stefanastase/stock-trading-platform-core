@@ -2,6 +2,8 @@ from flask import Flask, request, Response
 from yfinance import getQuotes
 import json
 import requests
+from datetime import datetime
+
 app = Flask(__name__)
 
 def verify(request):
@@ -27,6 +29,80 @@ def get_quotes(symbol):
 
     return Response(json.dumps(quotes), status=200, mimetype="application/json")
 
+@app.route('/quotes/<symbol>/buy', methods=['POST'])
+def place_buy_order(symbol):
+    # Verify if the client is authenticated
+    res = verify(request)
+
+    if res is None:
+        return Response(status=401)
+    
+    clientID = res['clientID']
+
+    payload = request.get_json(force=True)
+    quantity = int(payload['quantity'])
+    price = float(payload['price'])
+
+    # Request client's portfolio from Portfolio Management Service
+    response = requests.get(f"http://portfolio-mgmt:5000/portfolio/{clientID}")
+
+    if not response is None:
+        portfolio = response.json()
+        if float(portfolio['Cash']) < price * quantity:
+            return Response(json.dumps({'error': 'insufficient funds'}), status=400, mimetype='application/json')
+    else:
+        return Response(json.dumps({'error': 'portfolio not found'}), status=400, mimetype='application/json')
+    
+    order_payload = {
+        "client_id": clientID,
+        "symbol": symbol,
+        "type": 'B',
+        "quantity": quantity,
+        "price": price,
+        "placed_at": datetime.now().isoformat()
+    }
+
+    response = requests.post("http://order-mgmt:5000/orders", json=order_payload)
+    return Response(status=response.status_code)
+
+@app.route('/quotes/<symbol>/sell', methods=['POST'])
+def place_sell_order(symbol):
+    # Verify if the client is authenticated
+    res = verify(request)
+
+    if res is None:
+        return Response(status=401)
+    
+    clientID = res['clientID']
+
+    payload = request.get_json(force=True)
+    quantity = int(payload['quantity'])
+    price = float(payload['price'])
+
+    # Request client's portfolio from Portfolio Management Service
+    response = requests.get(f"http://portfolio-mgmt:5000/portfolio/{clientID}")
+
+    if not response is None:
+        portfolio = response.json()
+        if portfolio.get(symbol) is None:
+            return Response(json.dumps({'error': 'symbol not found in portfolio'}), status=400, mimetype='application/json')
+        elif float(portfolio[symbol]) < quantity:
+            return Response(json.dumps({'error': 'quantity of order exceeds available amount'}), status=400, mimetype='application/json')
+    else:
+        return Response(json.dumps({'error': 'portfolio not found'}), status=400, mimetype='application/json')
+    
+    order_payload = {
+        "client_id": clientID,
+        "symbol": symbol,
+        "type": 'S',
+        "quantity": quantity,
+        "price": price,
+        "placed_at": datetime.now().isoformat()
+    }
+
+    response = requests.post("http://order-mgmt:5000/orders", json=order_payload)
+    return Response(status=response.status_code)
+   
 @app.route('/portfolio', methods=['GET'])
 def get_portfolio():
     # Verify if the client is authenticated
