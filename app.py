@@ -156,7 +156,7 @@ def update_order(id):
         if not response is None:
             portfolio = response.json()
             symbol = order_json.get("Symbol")
-            
+
             if portfolio.get(symbol) is None:
                 return Response(json.dumps({'error': 'symbol not found in portfolio'}), status=400, mimetype='application/json')
             elif float(portfolio[symbol]) < quantity:
@@ -173,6 +173,35 @@ def update_order(id):
     response=requests.put(f"http://order-mgmt:5000/orders/{id}", json=update_payload)
 
     return Response(json.dumps(response.json()), status=response.status_code, mimetype='application/json')
+
+@app.route('/orders/<id>', methods=['DELETE'])
+def remove_order(id):
+    # Verify if the client is authenticated
+    res = verify(request)
+
+    if res is None:
+        return Response(status=401)
+    
+    clientID = res['clientID']
+
+    get_response = requests.get(f"http://order-mgmt:5000/orders/{id}")
+
+    if get_response.status_code == 404:
+        return Response(json.dumps({'error': 'order not found'}), status=404, mimetype='application/json')
+    
+    elif get_response.status_code != 200:
+        return Response(status=get_response.status_code)
+    
+    order_json = get_response.json()
+    if order_json['ClientID'] != clientID:
+        return Response(status=401)
+    
+    response = requests.delete(f"http://order-mgmt:5000/orders/{id}")
+
+    if response.status_code == 200:
+        return Response(json.dumps({'id': id}), status=200, mimetype='application/json')
+    
+    return Response(status=400)
 
 @app.route('/portfolio', methods=['GET'])
 def get_portfolio():
