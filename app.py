@@ -63,7 +63,7 @@ def place_buy_order(symbol):
     }
 
     response = requests.post("http://order-mgmt:5000/orders", json=order_payload)
-    return Response(status=response.status_code)
+    return Response(json.dumps(response.json()), status=response.status_code, mimetype='application/json')
 
 @app.route('/quotes/<symbol>/sell', methods=['POST'])
 def place_sell_order(symbol):
@@ -101,8 +101,79 @@ def place_sell_order(symbol):
     }
 
     response = requests.post("http://order-mgmt:5000/orders", json=order_payload)
-    return Response(status=response.status_code)
-   
+    return Response(json.dumps(response.json()), status=response.status_code, mimetype='application/json')
+
+@app.route('/orders', methods=['GET'])
+def get_orders():
+    # Verify if the client is authenticated
+    res = verify(request)
+
+    if res is None:
+        return Response(status=401)
+    
+    clientID = res['clientID']
+
+    response = requests.get(f"http://order-mgmt:5000/orders/client/{clientID}")
+    return Response(json.dumps(response.json()), status=response.status_code, mimetype='application/json')
+
+@app.route('/orders/<id>', methods=['PUT'])
+def update_order(id):
+    # Verify if the client is authenticated
+    res = verify(request)
+
+    if res is None:
+        return Response(status=401)
+    
+    clientID = res['clientID']
+
+    get_response = requests.get(f"http://order-mgmt:5000/orders/{id}")
+
+    if get_response.status_code != 200:
+        return Response(status=get_response.status_code)
+    
+    order_json = get_response.json()
+    if order_json['ClientID'] != clientID:
+        return Response(status=401)
+    
+    payload = request.get_json(force=True)
+    quantity = int(payload['quantity'])
+    price = float(payload['price'])
+
+    if order_json['Type'] == 'B':
+        # Request client's portfolio from Portfolio Management Service
+        response = requests.get(f"http://portfolio-mgmt:5000/portfolio/{clientID}")
+
+        if not response is None:
+            portfolio = response.json()
+            if float(portfolio['Cash']) < price * quantity:
+                return Response(json.dumps({'error': 'insufficient funds'}), status=400, mimetype='application/json')
+        else:
+            return Response(json.dumps({'error': 'portfolio not found'}), status=400, mimetype='application/json')
+    else:
+        # Request client's portfolio from Portfolio Management Service
+        response = requests.get(f"http://portfolio-mgmt:5000/portfolio/{clientID}")
+
+        if not response is None:
+            portfolio = response.json()
+            symbol = order_json.get("Symbol")
+            
+            if portfolio.get(symbol) is None:
+                return Response(json.dumps({'error': 'symbol not found in portfolio'}), status=400, mimetype='application/json')
+            elif float(portfolio[symbol]) < quantity:
+                return Response(json.dumps({'error': 'quantity of order exceeds available amount'}), status=400, mimetype='application/json')
+        else:
+            return Response(json.dumps({'error': 'portfolio not found'}), status=400, mimetype='application/json')
+        
+    update_payload = {
+        "quantity": quantity,
+        "price": price,
+        "placed_at": datetime.now().isoformat()
+    }
+
+    response=requests.put(f"http://order-mgmt:5000/orders/{id}", json=update_payload)
+
+    return Response(json.dumps(response.json()), status=response.status_code, mimetype='application/json')
+
 @app.route('/portfolio', methods=['GET'])
 def get_portfolio():
     # Verify if the client is authenticated
