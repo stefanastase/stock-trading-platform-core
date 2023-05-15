@@ -3,8 +3,11 @@ from yfinance import getQuotes
 import json
 import requests
 from datetime import datetime
+import os
 
 app = Flask(__name__)
+
+order_secret = os.getenv('ORDER_SECRET')
 
 def verify(request):
     authHeader = request.headers.get('authorization')
@@ -202,6 +205,14 @@ def remove_order(id):
         return Response(json.dumps({'id': id}), status=200, mimetype='application/json')
     
     return Response(status=400)
+
+@app.route('/portfolio/update', methods=['POST'])
+def update_portfolio():
+    payload = request.get_json(force=True)
+    if payload['secret'] != order_secret:
+        return Response(status=401)
+    
+    return Response(status=200)
 
 @app.route('/portfolio', methods=['GET'])
 def get_portfolio():
