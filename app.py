@@ -206,12 +206,98 @@ def remove_order(id):
     
     return Response(status=400)
 
-@app.route('/portfolio/update', methods=['POST'])
-def update_portfolio():
+@app.route('/orders/process', methods=['POST'])
+def process_order():
     payload = request.get_json(force=True)
+    # Operation Management service is the only entity allowed to perform this operation
     if payload['secret'] != order_secret:
         return Response(status=401)
     
+    client_id = payload['client_id']
+    from_client_id = payload['from_client_id']
+    symbol = payload['symbol']
+    quantity = int(payload['quantity'])
+    price = float(payload['price'])
+    type = payload['type']
+
+    # Request client's portfolio from Portfolio Management Service
+    response = requests.get(f"http://portfolio-mgmt:5000/portfolio/{client_id}")
+    
+    if response is None:
+        return Response(status=400)
+    elif response.status_code != 200:
+        return Response(status=response.status_code)
+    
+    portfolio = response.json()
+    # Get portfolio details about cash and symbol, if available
+    cash_balance = float(portfolio['Cash'])
+    old_quantity = int(portfolio[symbol]) if not portfolio.get(symbol) is None else 0 
+    # Buy Order
+    if type == 'B':
+        paid_amount = price * quantity
+        new_cash_balance_client = cash_balance - paid_amount
+        new_quantity = old_quantity + quantity 
+        client_payload = {
+            "Cash": new_cash_balance_client,
+            symbol: new_quantity
+        }
+        # Update portfolio of the other client as well if they are not an external client
+        if from_client_id != 'external':
+            from_response = requests.get(f"http://portfolio-mgmt:5000/portfolio/{from_client_id}")
+            if from_response is None:
+                return Response(status=400)
+            elif from_response.status_code != 200:
+                return Response(status=from_response.status_code)
+            
+            from_portfolio = from_response.json()
+            from_cash_balance = float(from_portfolio['Cash'])
+            from_quantity = int(from_portfolio[symbol]) if not from_portfolio.get(symbol) is None else 0 
+            new_cash_balance_from_client = from_cash_balance + paid_amount
+            from_client_payload = {
+                "Cash": new_cash_balance_from_client,
+                symbol: from_quantity - quantity
+            }
+
+            from_response = requests.put(f"http://portfolio-mgmt:5000/portfolio/{from_client_id}", json=from_client_payload)
+            if from_response.status_code != 200:
+                return Response(status=from_response.status_code)
+
+        response = requests.put(f"http://portfolio-mgmt:5000/portfolio/{client_id}", json=client_payload)
+        if response.status_code != 200:
+            return Response(status=response.status_code)
+    # Sell Order
+    else:
+        paid_amount = price * quantity
+        new_cash_balance_client = cash_balance + paid_amount
+        new_quantity = old_quantity - quantity
+        client_payload = {
+            "Cash": new_cash_balance_client,
+            symbol: new_quantity
+        }
+        if from_client_id != 'external':
+            from_response = requests.get(f"http://portfolio-mgmt:5000/portfolio/{from_client_id}")
+            if from_response is None:
+                return Response(status=400)
+            elif from_response.status_code != 200:
+                return Response(status=from_response.status_code)
+            
+            from_portfolio = from_response.json()
+            from_cash_balance = float(from_portfolio['Cash'])
+            from_quantity = int(from_portfolio[symbol]) if not from_portfolio.get(symbol) is None else 0 
+            new_cash_balance_from_client = from_cash_balance - paid_amount
+            from_client_payload = {
+                "Cash": new_cash_balance_from_client,
+                symbol: from_quantity + quantity
+            }
+
+            from_response = requests.put(f"http://portfolio-mgmt:5000/portfolio/{from_client_id}", json=from_client_payload)
+            if from_response.status_code != 200:
+                return Response(status=from_response.status_code)
+
+        response = requests.put(f"http://portfolio-mgmt:5000/portfolio/{client_id}", json=client_payload)
+        if response.status_code != 200:
+            return Response(status=response.status_code)
+
     return Response(status=200)
 
 @app.route('/portfolio', methods=['GET'])
