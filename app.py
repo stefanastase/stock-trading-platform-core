@@ -30,6 +30,11 @@ def get_quotes(symbol):
     if quotes is None:
         return Response(status=404)
 
+    response = requests.get(f"http://order-mgmt:5000/depth/{symbol}")
+
+    if response.status_code == 200:
+        quotes['depth']  = response.json()
+    
     return Response(json.dumps(quotes), status=200, mimetype="application/json")
 
 @app.route('/quotes/<symbol>/buy', methods=['POST'])
