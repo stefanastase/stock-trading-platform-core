@@ -345,12 +345,12 @@ def deposit():
     
     if not response is None:
         data = response.json()
-        old_cash_balance = int(data['Cash'])
+        old_cash_balance = float(data['Cash'])
 
         # Get request body
         payload = request.get_json(force=True)
 
-        deposited_cash = int(payload.get('amount'))
+        deposited_cash = float(payload.get('amount'))
         new_cash_balance = old_cash_balance + deposited_cash
 
         update_payload = {"Cash": str(new_cash_balance)}
@@ -376,15 +376,15 @@ def withdraw():
     
     if not response is None:
         data = response.json()
-        cash_balance = int(data['Cash'])
+        cash_balance = float(data['Cash'])
 
         # Get request body
         payload = request.get_json(force=True)
 
-        withdrawn_cash = int(payload.get('amount'))
+        withdrawn_cash = float(payload.get('amount'))
         new_cash_balance = cash_balance - withdrawn_cash
 
-        if new_cash_balance < 0:
+        if new_cash_balance < 0.0:
             return Response(json.dumps({'error': 'insufficient funds'}), status=400, mimetype='application/json')
 
         update_payload = {"Cash": str(new_cash_balance)}
