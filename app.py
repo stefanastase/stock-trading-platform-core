@@ -7,7 +7,7 @@ import os
 
 app = Flask(__name__)
 
-order_secret = os.getenv('ORDER_SECRET')
+order_secret_file = os.getenv('ORDER_SECRET_FILE')
 
 def verify(request):
     authHeader = request.headers.get('authorization')
@@ -214,6 +214,11 @@ def remove_order(id):
 @app.route('/orders/process', methods=['POST'])
 def process_order():
     payload = request.get_json(force=True)
+    order_secret = None
+    with open(order_secret_file) as file:
+        order_secret = file.read()
+    if order_secret == None:
+        return Response(status=400)
     # Operation Management service is the only entity allowed to perform this operation
     if payload['secret'] != order_secret:
         return Response(status=401)
